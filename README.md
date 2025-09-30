@@ -62,16 +62,20 @@ filter-every-well plate out
 from filter_every_well import PressureProcessor
 
 # Context manager ensures proper cleanup
-# On initialization: servos to neutral (90°), actuator to OUT (0° - resting state)
+# On initialization: servos to neutral (90°), actuator to OUT (180° - resting state)
 with PressureProcessor() as pp96:
     # Control press (servo 1 / servo 2 mirrored)
     pp96.press_up()        # 30° / 150°
     pp96.press_down()      # 150° / 30°
     pp96.press_neutral()   # 90° / 90°
     
-    # Control plate actuator (only IN and OUT)
-    pp96.plate_in()        # Extend to 180° (push)
-    pp96.plate_out()       # Retract to 0° (pull - resting state)
+    # Control plate actuator (only IN and OUT, with smooth movement)
+    pp96.plate_in()        # Retract to 0° (pull - plate under press)
+    pp96.plate_out()       # Extend to 180° (push - plate away, resting state)
+    
+    # Optional: instant movement without speed control
+    pp96.plate_in(smooth=False)
+    pp96.plate_out(smooth=False)
 
 # Or manual initialization with custom configuration
 pp96 = PressureProcessor(
@@ -83,8 +87,9 @@ pp96 = PressureProcessor(
     servo_up_angle=30.0,         # Servo 1 angle for UP
     servo_down_angle=150.0,      # Servo 1 angle for DOWN
     servo_neutral_angle=90.0,    # Neutral position
-    actuator_in_angle=180.0,     # Actuator extended (plate in/push)
-    actuator_out_angle=0.0,      # Actuator retracted (plate out/pull - resting)
+    actuator_in_angle=0.0,       # Actuator retracted (plate in/pull)
+    actuator_out_angle=180.0,    # Actuator extended (plate out/push - resting)
+    actuator_speed_percent=60,   # Actuator movement speed 1-100%
     pulse_min=500,               # Pulse width range
     pulse_max=2500,
 )

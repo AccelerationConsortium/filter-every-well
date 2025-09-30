@@ -30,12 +30,12 @@ class PressureProcessor:
     - Press UP: 30° / 150° (servo_1 / servo_2)
     - Press DOWN: 150° / 30°
     - Press NEUTRAL: 90° / 90°
-    - Actuator IN: 180° (extended/push)
-    - Actuator OUT: 0° (retracted/pull - resting state)
+    - Actuator OUT: 180° (extended/push - plate away from press, resting state)
+    - Actuator IN: 0° (retracted/pull - plate under press)
     
     On initialization:
     - Servos move to neutral (90° / 90°)
-    - Actuator moves to OUT position (0° - resting state)
+    - Actuator moves to OUT position (180° - resting state)
     - Pulse width configured to 500-2500µs for all channels
     """
 
@@ -49,8 +49,9 @@ class PressureProcessor:
         servo_up_angle: float = 30.0,
         servo_down_angle: float = 150.0,
         servo_neutral_angle: float = 90.0,
-        actuator_in_angle: float = 180.0,
-        actuator_out_angle: float = 0.0,
+        actuator_in_angle: float = 0.0,
+        actuator_out_angle: float = 180.0,
+        actuator_speed_percent: int = 60,
         pulse_min: int = 500,
         pulse_max: int = 2500,
     ):
@@ -66,8 +67,9 @@ class PressureProcessor:
             servo_up_angle: Angle for servo 1 to press UP (default 30°)
             servo_down_angle: Angle for servo 1 to press DOWN (default 150°)
             servo_neutral_angle: Neutral angle for servo 1 (default 90°)
-            actuator_in_angle: Actuator angle for plate IN/extended/push (default 180°)
-            actuator_out_angle: Actuator angle for plate OUT/retracted/pull (default 0°, resting state)
+            actuator_in_angle: Actuator angle for plate IN/retracted/pull (default 0°)
+            actuator_out_angle: Actuator angle for plate OUT/extended/push (default 180°, resting state)
+            actuator_speed_percent: Speed for actuator movement, 1-100% (default 60)
             pulse_min: Minimum pulse width in microseconds (default 500)
             pulse_max: Maximum pulse width in microseconds (default 2500)
         """
@@ -91,9 +93,11 @@ class PressureProcessor:
         self.servo_down_angle = servo_down_angle
         self.servo_neutral_angle = servo_neutral_angle
         
-        # Actuator angles
+        # Actuator angles and speed
         self.actuator_in_angle = actuator_in_angle
         self.actuator_out_angle = actuator_out_angle
+        self.actuator_speed_percent = max(1, min(100, actuator_speed_percent))
+        self._actuator_current_angle = actuator_out_angle  # Track current position
         
         # Configure pulse width ranges for all servos
         for ch in (self.servo_1_channel, self.servo_2_channel, self.actuator_channel):
@@ -102,7 +106,7 @@ class PressureProcessor:
         
         # Initialize: servos to neutral, actuator to OUT (resting state)
         self._reset_servos()
-        self.plate_out()
+        self.plate_out(smooth=False)  # Jump to position on init
 
     def _reset_servos(self) -> None:
         """Reset both servos to neutral position synchronously."""
@@ -157,26 +161,71 @@ class PressureProcessor:
         """
         self._reset_servos()
 
-    def plate_in(self) -> None:
+    def _step_delay_from_speed(self) -> float:
         """
-        Move plate under the press (extend actuator to IN position, 180°).
-        Equivalent to 'push' in test_Waters.py.
+        Calculate delay per degree based on speed percentage.
+        Maps 1-100% to 30-1 ms/degree (matching test_Waters.py).
         """
-        self.kit.servo[self.actuator_channel].angle = self.actuator_in_angle
+        pct = self.actuator_speed_percent
+        ms = ((100 - pct) * (30 - 1) / (100 - 1)) + 1
+        return ms / 1000.0
 
-    def plate_out(self) -> None:
+    def _move_actuator_smooth(self, target_angle: float) -> None:
         """
-        Retract plate from press (move actuator to OUT position, 0°).
-        This is the resting state. Equivalent to 'pull' in test_Waters.py.
+        Smoothly move actuator to target angle with speed shaping.
+        Matches move_actuator_to() logic from test_Waters.py.
         """
-        self.kit.servo[self.actuator_channel].angle = self.actuator_out_angle
+        target_angle = max(0, min(180, target_angle))
+        current = self._actuator_current_angle
+        
+        if current == target_angle:
+            return
+            
+        step = 1 if target_angle > current else -1
+        delay = self._step_delay_from_speed()
+        
+        angle = current
+        while angle != target_angle:
+            angle += step
+            self.kit.servo[self.actuator_channel].angle = angle
+            time.sleep(delay)
+        
+        self._actuator_current_angle = target_angle
+
+    def plate_in(self, smooth: bool = True) -> None:
+        """
+        Move plate under the press (retract actuator to IN position, 0°).
+        Equivalent to 'pull' in test_Waters.py.
+        
+        Args:
+            smooth: If True, move smoothly with speed control. If False, jump immediately.
+        """
+        if smooth:
+            self._move_actuator_smooth(self.actuator_in_angle)
+        else:
+            self.kit.servo[self.actuator_channel].angle = self.actuator_in_angle
+            self._actuator_current_angle = self.actuator_in_angle
+
+    def plate_out(self, smooth: bool = True) -> None:
+        """
+        Move plate away from press (extend actuator to OUT position, 180°).
+        This is the resting state. Equivalent to 'push' in test_Waters.py.
+        
+        Args:
+            smooth: If True, move smoothly with speed control. If False, jump immediately.
+        """
+        if smooth:
+            self._move_actuator_smooth(self.actuator_out_angle)
+        else:
+            self.kit.servo[self.actuator_channel].angle = self.actuator_out_angle
+            self._actuator_current_angle = self.actuator_out_angle
 
     def shutdown(self) -> None:
         """
         Safely shut down: return servos to neutral, actuator to OUT (resting state).
         """
         self._reset_servos()
-        self.plate_out()
+        self.plate_out(smooth=True)  # Smooth return to resting position
         time.sleep(0.2)  # Brief pause for movement to complete
         # Release servo pulses (optional)
         try:
