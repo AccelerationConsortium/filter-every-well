@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filter-every-well"
+version = "0.1.0"
+description = "Control Waters Positive Pressure-96 Processor with Raspberry Pi Zero 2W and 16-channel motor HAT"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Your Name", email = "you@example.com" }
+]
+keywords = ["waters", "positive pressure", "pp96", "raspberry pi", "pca9685", "automation", "lab"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+hardware = [
+  "adafruit-circuitpython-servokit>=1.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/filter-every-well"
+Issues = "https://github.com/your-org/filter-every-well/issues"
+
+[project.scripts]
+filter-every-well = "filter_every_well.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["filter_every_well*"]
+exclude = ["tests*"]
