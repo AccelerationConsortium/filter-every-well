@@ -35,7 +35,7 @@ class PressureProcessor:
     
     On initialization:
     - Servos move to neutral (90° / 90°)
-    - Actuator initializes to OUT position (180° - resting state)
+    - Actuator position is unknown (first command will move it)
     - Pulse width configured to 500-2500µs for all channels
     """
 
@@ -107,10 +107,9 @@ class PressureProcessor:
         # Initialize: servos to neutral
         self._reset_servos()
         
-        # Initialize actuator channel (set current angle to OUT position but don't move)
-        # This activates the servo channel without physically moving the actuator
-        self.kit.servo[self.actuator_channel].angle = self.actuator_out_angle
-        self._actuator_current_angle = self.actuator_out_angle
+        # Set actuator tracking to None (unknown position)
+        # This ensures we always move on first command (important for CLI)
+        self._actuator_current_angle = None
 
     def _reset_servos(self) -> None:
         """Reset both servos to neutral position synchronously."""
@@ -182,12 +181,14 @@ class PressureProcessor:
         target_angle = max(0, min(180, target_angle))
         current = self._actuator_current_angle
         
-        # If current position is unknown, jump directly to target
+        # If current position is unknown, write target directly
+        # (No smooth movement on first command after init)
         if current is None:
             self.kit.servo[self.actuator_channel].angle = target_angle
             self._actuator_current_angle = target_angle
             return
         
+        # Skip if already at target
         if current == target_angle:
             return
             
