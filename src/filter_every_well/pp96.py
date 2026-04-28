@@ -107,8 +107,8 @@ class PressureProcessor:
         # Initialize: servos to neutral
         self._reset_servos()
         
-        # Set actuator tracking to None (unknown position)
-        # This ensures we always move on first command (important for CLI)
+        # Actuator position is unknown, don't write any initial value
+        # First command will set the angle
         self._actuator_current_angle = None
 
     def _reset_servos(self) -> None:
@@ -181,11 +181,15 @@ class PressureProcessor:
         target_angle = max(0, min(180, target_angle))
         current = self._actuator_current_angle
         
-        # If current position is unknown, write target directly
-        # (No smooth movement on first command after init)
+        # If current position is unknown, write target directly and give it time to move
+        # Estimate max time needed: 180 degrees at our speed setting
         if current is None:
             self.kit.servo[self.actuator_channel].angle = target_angle
             self._actuator_current_angle = target_angle
+            # Calculate time needed for 180° at current speed
+            delay_per_degree = self._step_delay_from_speed()
+            max_movement_time = 180 * delay_per_degree
+            time.sleep(max_movement_time + 0.5)  # Add buffer
             return
         
         # Skip if already at target
