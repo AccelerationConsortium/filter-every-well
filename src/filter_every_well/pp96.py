@@ -30,8 +30,8 @@ class PressureProcessor:
     - Press UP: 30° / 150° (servo_1 / servo_2)
     - Press DOWN: 150° / 30°
     - Press NEUTRAL: 90° / 90°
-    - Actuator OUT: 180° (extended/push - plate away from press, resting state)
-    - Actuator IN: 0° (retracted/pull - plate under press)
+    - Actuator OUT: 140° (extended/push - plate away from press, resting state)
+    - Actuator IN: 40° (retracted/pull - plate under press)
     
     On initialization:
     - Servos move to neutral (90° / 90°)
@@ -49,8 +49,8 @@ class PressureProcessor:
         servo_up_angle: float = 30.0,
         servo_down_angle: float = 150.0,
         servo_neutral_angle: float = 90.0,
-        actuator_in_angle: float = 0.0,
-        actuator_out_angle: float = 180.0,
+        actuator_in_angle: float = 40.0,
+        actuator_out_angle: float = 140.0,
         actuator_speed_percent: int = 60,
         pulse_min: int = 500,
         pulse_max: int = 2500,
@@ -67,8 +67,8 @@ class PressureProcessor:
             servo_up_angle: Angle for servo 1 to press UP (default 30°)
             servo_down_angle: Angle for servo 1 to press DOWN (default 150°)
             servo_neutral_angle: Neutral angle for servo 1 (default 90°)
-            actuator_in_angle: Actuator angle for plate IN/retracted/pull (default 0°)
-            actuator_out_angle: Actuator angle for plate OUT/extended/push (default 180°, resting state)
+            actuator_in_angle: Actuator angle for plate IN/retracted/pull (default 40°)
+            actuator_out_angle: Actuator angle for plate OUT/extended/push (default 140°, resting state)
             actuator_speed_percent: Speed for actuator movement, 1-100% (default 60)
             pulse_min: Minimum pulse width in microseconds (default 500)
             pulse_max: Maximum pulse width in microseconds (default 2500)
@@ -107,8 +107,15 @@ class PressureProcessor:
         # Initialize: servos to neutral
         self._reset_servos()
         
-        # Actuator position is unknown, don't write any initial value
-        # First command will set the angle
+        # Initialize actuator to middle position (activates PWM channel)
+        # Similar to test_Waters.py which writes ACT_READY_ANGLE (90°)
+        try:
+            self.kit.servo[self.actuator_channel].angle = 90
+            time.sleep(0.2)  # Let it settle
+        except Exception:
+            pass
+        
+        # Track as None so first command always moves from wherever it is
         self._actuator_current_angle = None
 
     def _reset_servos(self) -> None:
@@ -178,20 +185,15 @@ class PressureProcessor:
         Smoothly move actuator to target angle with speed shaping.
         Matches move_actuator_to() logic from test_Waters.py.
         """
-        target_angle = max(0, min(180, target_angle))
+        target_angle = max(self.actuator_in_angle, min(self.actuator_out_angle, target_angle))
         current = self._actuator_current_angle
         
-        # If current position is unknown, write target directly and give it time to move
-        # Estimate max time needed: 180 degrees at our speed setting
+        # If current position is unknown, assume worst case (opposite end)
+        # and do smooth movement from there
         if current is None:
-            self.kit.servo[self.actuator_channel].angle = target_angle
-            self._actuator_current_angle = target_angle
-            # Calculate time needed for 180° at current speed
-            delay_per_degree = self._step_delay_from_speed()
-            max_movement_time = 180 * delay_per_degree
-            time.sleep(max_movement_time + 0.5)  # Add buffer
-            return
-        
+            # Assume we're at the opposite end for maximum movement
+            current = self.actuator_out_angle if target_angle < 90 else self.actuator_in_angle
+            
         # Skip if already at target
         if current == target_angle:
             return
@@ -209,7 +211,7 @@ class PressureProcessor:
 
     def plate_in(self, smooth: bool = True) -> None:
         """
-        Move plate under the press (retract actuator to IN position, 0°).
+        Move plate under the press (retract actuator to IN position, 40°).
         Equivalent to 'pull' in test_Waters.py.
         
         Args:
@@ -223,7 +225,7 @@ class PressureProcessor:
 
     def plate_out(self, smooth: bool = True) -> None:
         """
-        Move plate away from press (extend actuator to OUT position, 180°).
+        Move plate away from press (extend actuator to OUT position, 140°).
         This is the resting state. Equivalent to 'push' in test_Waters.py.
         
         Args:

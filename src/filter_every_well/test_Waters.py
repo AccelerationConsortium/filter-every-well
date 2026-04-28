@@ -95,9 +95,9 @@ def move_to_angle_mirrored(target: int):
 # ========================== ADDED: Linear Actuator on CH2 ==========================
 SERVO_CH_ACT = 2  # third channel on PCA9685
 
-# Tune these for your actuator/linkage
-ACT_RETRACT_ANGLE = 0
-ACT_EXTEND_ANGLE  = 180
+# Tune these for your actuator/linkage (actual working range: 40-140)
+ACT_RETRACT_ANGLE = 40
+ACT_EXTEND_ANGLE  = 140
 ACT_READY_ANGLE   = 90
 
 _actuator_angle = ACT_READY_ANGLE

@@ -70,8 +70,8 @@ with PressureProcessor() as pp96:
     pp96.press_neutral()   # 90° / 90°
     
     # Control plate actuator (only IN and OUT, with smooth movement)
-    pp96.plate_in()        # Retract to 0° (pull - plate under press)
-    pp96.plate_out()       # Extend to 180° (push - plate away, resting state)
+    pp96.plate_in()        # Retract to 40° (pull - plate under press)
+    pp96.plate_out()       # Extend to 140° (push - plate away, resting state)
     
     # Optional: instant movement without speed control
     pp96.plate_in(smooth=False)
@@ -87,8 +87,8 @@ pp96 = PressureProcessor(
     servo_up_angle=30.0,         # Servo 1 angle for UP
     servo_down_angle=150.0,      # Servo 1 angle for DOWN
     servo_neutral_angle=90.0,    # Neutral position
-    actuator_in_angle=0.0,       # Actuator retracted (plate in/pull)
-    actuator_out_angle=180.0,    # Actuator extended (plate out/push - resting)
+    actuator_in_angle=40.0,      # Actuator retracted (plate in/pull)
+    actuator_out_angle=140.0,    # Actuator extended (plate out/push - resting)
     actuator_speed_percent=60,   # Actuator movement speed 1-100%
     pulse_min=500,               # Pulse width range
     pulse_max=2500,
