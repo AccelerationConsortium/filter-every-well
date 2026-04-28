@@ -181,11 +181,12 @@ class PressureProcessor:
         target_angle = max(self.actuator_in_angle, min(self.actuator_out_angle, target_angle))
         current = self._actuator_current_angle
         
-        # If current position is unknown, assume worst case (opposite end)
-        # and do smooth movement from there
+        # If current position is unknown, just write target directly
+        # The actuator will move from wherever it physically is
         if current is None:
-            # Assume we're at the opposite end for maximum movement
-            current = self.actuator_out_angle if target_angle < 90 else self.actuator_in_angle
+            self.kit.servo[self.actuator_channel].angle = target_angle
+            self._actuator_current_angle = target_angle
+            return
             
         # Skip if already at target
         if current == target_angle:
