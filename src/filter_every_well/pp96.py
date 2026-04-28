@@ -107,15 +107,8 @@ class PressureProcessor:
         # Initialize: servos to neutral
         self._reset_servos()
         
-        # Initialize actuator to middle position (activates PWM channel)
-        # Similar to test_Waters.py which writes ACT_READY_ANGLE (90°)
-        try:
-            self.kit.servo[self.actuator_channel].angle = 90
-            time.sleep(0.2)  # Let it settle
-        except Exception:
-            pass
-        
-        # Track as None so first command always moves from wherever it is
+        # Don't write to actuator channel during init - leave it where it is
+        # Track as None so first plate command will move it properly
         self._actuator_current_angle = None
 
     def _reset_servos(self) -> None:
