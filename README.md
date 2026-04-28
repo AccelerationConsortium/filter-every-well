@@ -11,7 +11,7 @@ for driving two servos (press up/down/neutral) and a linear actuator (plate in/o
 
 - Raspberry Pi Zero 2W
 - PCA9685 16‑channel PWM/servo HAT at I2C address 0x40
-- Two servos on channels 0 & 1 (mirror-mounted, servo_2 = 180° - servo_1)
+- Two servos on channels 0 & 15 (mirror-mounted, servo_2 = 180° - servo_1)
 - Linear actuator on channel 2 (controlled as a servo)
 
 The two servos rotate in opposite directions (mirrored) to press the same position on mirror-image rocker buttons. All servos configured with 500-2500µs pulse width range.
@@ -82,7 +82,7 @@ pp96 = PressureProcessor(
     channels=16,
     address=0x40,
     servo_1_channel=0,           # Primary servo
-    servo_2_channel=1,           # Mirrored servo (180 - servo_1)
+    servo_2_channel=15,          # Mirrored servo (180 - servo_1)
     actuator_channel=2,          # Linear actuator
     servo_up_angle=30.0,         # Servo 1 angle for UP
     servo_down_angle=150.0,      # Servo 1 angle for DOWN

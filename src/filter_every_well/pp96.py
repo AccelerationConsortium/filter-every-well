@@ -23,7 +23,7 @@ class PressureProcessor:
     
     Hardware:
     - PCA9685 16-channel PWM/servo driver at I2C address 0x40
-    - Two servos on channels 0 & 1 (mirrored: servo_2 = 180 - servo_1)
+    - Two servos on channels 0 & 15 (mirrored: servo_2 = 180 - servo_1)
     - Linear actuator on channel 2 (controlled as a servo)
     
     Default angles (matching test_Waters.py):
@@ -44,7 +44,7 @@ class PressureProcessor:
         channels: int = 16,
         address: int = 0x40,
         servo_1_channel: int = 0,
-        servo_2_channel: int = 1,
+        servo_2_channel: int = 15,
         actuator_channel: int = 2,
         servo_up_angle: float = 30.0,
         servo_down_angle: float = 150.0,

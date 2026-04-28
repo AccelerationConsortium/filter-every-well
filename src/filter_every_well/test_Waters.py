@@ -42,7 +42,7 @@ SPEED_PERCENT = 60  # 1..100 (higher = faster)
 
 # PCA9685 channels for the two servos
 SERVO_CH_1 = 0     # primary
-SERVO_CH_2 = 1     # mirrored (180 - primary)
+SERVO_CH_2 = 15    # mirrored (180 - primary)
 
 # ===== Servo + PCA9685 setup =====
 # 16 channels on a single PCA9685
