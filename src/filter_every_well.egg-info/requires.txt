@@ -1,0 +1,4 @@
+
+[hardware]
+adafruit-circuitpython-servokit>=1.3.0
+RPi.GPIO>=0.7.0

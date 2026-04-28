@@ -1,11 +1,7 @@
 import argparse
 from typing import List
 
-try:
-    from filter_every_well.pp96 import PressureProcessor
-    HAS_HARDWARE = True
-except RuntimeError:
-    HAS_HARDWARE = False
+from filter_every_well.pp96 import PressureProcessor
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,18 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
 def execute_command(args: argparse.Namespace) -> int:
     command = args.command
 
-    if not HAS_HARDWARE:
-        # Dry-run mode when hardware libraries not available
-        if command in {"up", "down", "neutral"}:
-            print(f"[DRY-RUN] Press command: {command}")
-            return 0
-        if command == "plate":
-            print(f"[DRY-RUN] Plate command: {args.plate_cmd}")
-            return 0
-        print("Unknown command")
-        return 1
-
-    # Execute with actual hardware
+    # Try to execute with actual hardware
     try:
         with PressureProcessor() as pp96:
             if command == "up":
@@ -76,6 +61,17 @@ def execute_command(args: argparse.Namespace) -> int:
                 print("Unknown command")
                 return 1
         return 0
+    except RuntimeError as e:
+        # Hardware not available, run in dry-run mode
+        if "adafruit-circuitpython-servokit not installed" in str(e):
+            if command in {"up", "down", "neutral"}:
+                print(f"[DRY-RUN] Press command: {command}")
+                return 0
+            if command == "plate":
+                print(f"[DRY-RUN] Plate command: {args.plate_cmd}")
+                return 0
+        print(f"Error: {e}")
+        return 1
     except Exception as e:
         print(f"Error: {e}")
         return 1

@@ -1,0 +1,2 @@
+[console_scripts]
+filter-every-well = filter_every_well.cli:main
