@@ -19,9 +19,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi
-ExecStart=/home/pi/Projects/filter-every-well/venv/bin/filter-every-well-api --host 0.0.0.0 --port 8000
+User=sdl2
+WorkingDirectory=/home/sdl2
+ExecStart=/home/sdl2/Projects/filter-every-well/venv/bin/filter-every-well-api --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5s
 
