@@ -35,7 +35,7 @@ class PressureProcessor:
     
     On initialization:
     - Servos move to neutral (90° / 90°)
-    - Actuator position is not changed (stays where it is)
+    - Actuator initializes to OUT position (180° - resting state)
     - Pulse width configured to 500-2500µs for all channels
     """
 
@@ -104,8 +104,13 @@ class PressureProcessor:
             self.kit.servo[ch].set_pulse_width_range(pulse_min, pulse_max)
             self.kit.servo[ch].actuation_range = 180
         
-        # Initialize: servos to neutral, actuator position is unknown (don't move it)
+        # Initialize: servos to neutral
         self._reset_servos()
+        
+        # Initialize actuator channel (set current angle to OUT position but don't move)
+        # This activates the servo channel without physically moving the actuator
+        self.kit.servo[self.actuator_channel].angle = self.actuator_out_angle
+        self._actuator_current_angle = self.actuator_out_angle
 
     def _reset_servos(self) -> None:
         """Reset both servos to neutral position synchronously."""
