@@ -35,7 +35,7 @@ class PressureProcessor:
     
     On initialization:
     - Servos move to neutral (90° / 90°)
-    - Actuator moves to OUT position (180° - resting state)
+    - Actuator position is not changed (stays where it is)
     - Pulse width configured to 500-2500µs for all channels
     """
 
@@ -97,16 +97,15 @@ class PressureProcessor:
         self.actuator_in_angle = actuator_in_angle
         self.actuator_out_angle = actuator_out_angle
         self.actuator_speed_percent = max(1, min(100, actuator_speed_percent))
-        self._actuator_current_angle = actuator_out_angle  # Track current position
+        self._actuator_current_angle = None  # Unknown until first movement
         
         # Configure pulse width ranges for all servos
         for ch in (self.servo_1_channel, self.servo_2_channel, self.actuator_channel):
             self.kit.servo[ch].set_pulse_width_range(pulse_min, pulse_max)
             self.kit.servo[ch].actuation_range = 180
         
-        # Initialize: servos to neutral, actuator to OUT (resting state)
+        # Initialize: servos to neutral, actuator position is unknown (don't move it)
         self._reset_servos()
-        self.plate_out(smooth=False)  # Jump to position on init
 
     def _reset_servos(self) -> None:
         """Reset both servos to neutral position synchronously."""
@@ -177,6 +176,12 @@ class PressureProcessor:
         """
         target_angle = max(0, min(180, target_angle))
         current = self._actuator_current_angle
+        
+        # If current position is unknown, jump directly to target
+        if current is None:
+            self.kit.servo[self.actuator_channel].angle = target_angle
+            self._actuator_current_angle = target_angle
+            return
         
         if current == target_angle:
             return

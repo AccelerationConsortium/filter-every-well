@@ -62,7 +62,7 @@ filter-every-well plate out
 from filter_every_well import PressureProcessor
 
 # Context manager ensures proper cleanup
-# On initialization: servos to neutral (90°), actuator to OUT (180° - resting state)
+# On initialization: servos to neutral (90°), actuator position unchanged
 with PressureProcessor() as pp96:
     # Control press (servo 1 / servo 2 mirrored)
     pp96.press_up()        # 30° / 150°

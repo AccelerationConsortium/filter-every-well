@@ -32,7 +32,8 @@ def execute_command(args: argparse.Namespace) -> int:
 
     # Try to execute with actual hardware
     try:
-        with PressureProcessor() as pp96:
+        pp96 = PressureProcessor()
+        try:
             if command == "up":
                 print("Moving press UP...")
                 pp96.press_up()
@@ -60,6 +61,9 @@ def execute_command(args: argparse.Namespace) -> int:
             else:
                 print("Unknown command")
                 return 1
+        finally:
+            # Only park servos to neutral, leave plate position as commanded
+            pp96.press_neutral()
         return 0
     except RuntimeError as e:
         # Hardware not available, run in dry-run mode
