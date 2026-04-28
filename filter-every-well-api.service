@@ -1,0 +1,32 @@
+# Systemd service file for Waters PP96 Control API
+# Copy to: /etc/systemd/system/filter-every-well-api.service
+#
+# Installation:
+#   sudo cp filter-every-well-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable filter-every-well-api
+#   sudo systemctl start filter-every-well-api
+#
+# Check status:
+#   sudo systemctl status filter-every-well-api
+#
+# View logs:
+#   sudo journalctl -u filter-every-well-api -f
+
+[Unit]
+Description=Waters PP96 Control API
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/home/pi/Projects/filter-every-well/venv/bin/filter-every-well-api --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5s
+
+# Environment variables (adjust as needed)
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target

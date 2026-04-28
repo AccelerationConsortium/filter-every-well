@@ -30,20 +30,63 @@ python -m build
 pip install dist/*.whl
 ```
 
-### Optional hardware dependencies
+### Optional dependencies
 
-Install with extras to pull in common libraries for the PCA9685 on Raspberry Pi:
+**Hardware support (for Raspberry Pi):**
 
 ```bash
 pip install .[hardware]
 ```
 
-This extra includes:
-- adafruit-circuitpython-servokit (which pulls in pca9685 and blinka)
+Includes: `adafruit-circuitpython-servokit`, `RPi.GPIO`
+
+**REST API server:**
+
+```bash
+pip install .[api]
+```
+
+Includes: `fastapi`, `uvicorn`, `pydantic`
+
+**Everything (hardware + API):**
+
+```bash
+pip install .[all]
+```
 
 ## Usage
 
-### CLI
+### REST API (Recommended for persistent service)
+
+Start the API server:
+
+```bash
+# Start API server (default: http://0.0.0.0:8000)
+filter-every-well-api
+
+# Or specify host/port
+filter-every-well-api --host 127.0.0.1 --port 5000
+```
+
+Access the interactive API docs at `http://localhost:8000/docs`
+
+**API Endpoints:**
+
+```bash
+# Check status
+curl http://localhost:8000/status
+
+# Control press
+curl -X POST http://localhost:8000/press/up
+curl -X POST http://localhost:8000/press/down
+curl -X POST http://localhost:8000/press/neutral
+
+# Control plate
+curl -X POST http://localhost:8000/plate/in
+curl -X POST http://localhost:8000/plate/out
+```
+
+### CLI (Quick one-shot commands)
 
 ```bash
 # Move press
@@ -97,11 +140,35 @@ pp96.press_up(hold_time=0.5)
 pp96.shutdown()
 ```
 
+## Running API as a System Service
+
+To run the API automatically on boot (recommended for production):
+
+```bash
+# Copy service file
+sudo cp filter-every-well-api.service /etc/systemd/system/
+
+# Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable filter-every-well-api
+sudo systemctl start filter-every-well-api
+
+# Check status
+sudo systemctl status filter-every-well-api
+
+# View logs
+sudo journalctl -u filter-every-well-api -f
+```
+
+The API will be available at `http://<pi-ip>:8000`
+
 ## Development
 
 - Project metadata is defined in `pyproject.toml` (PEP 621)
 - Source lives under `src/filter_every_well/`
-- Entry point script `filter-every-well` maps to `filter_every_well.cli:main`
+- Entry points:
+  - `filter-every-well` → CLI (`filter_every_well.cli:main`)
+  - `filter-every-well-api` → API server (`filter_every_well.api:main`)
 
 ## License
 
