@@ -41,9 +41,9 @@ def _get_tailscale_ip() -> Optional[str]:
 
 # Response models
 class StatusResponse(BaseModel):
+    equipment_name: str = "waters_filtration_pressor"
     equipment_ip: Optional[str] = Field(default_factory=_get_wlan_ip)
     equipment_tailscale: Optional[str] = Field(default_factory=_get_tailscale_ip)
-    equipment_name: str = "waters_filtration_pressor"
     equipment_status: str
     message: str
     system_state: Optional[str] = None  # "stopped", "active"
