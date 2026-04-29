@@ -19,6 +19,9 @@ except RuntimeError:
 class StatusResponse(BaseModel):
     status: str
     message: str
+    system_state: Optional[str] = None  # "stopped", "active"
+    press_state: Optional[str] = None  # "up", "down", "unknown"
+    plate_state: Optional[str] = None  # "in", "out", "unknown"
     actuator_position: Optional[float] = None
 
 
@@ -71,6 +74,9 @@ async def root():
     return StatusResponse(
         status="ok",
         message="Waters PP96 Control API is running",
+        system_state=pp96._system_state if pp96 else None,
+        press_state=pp96._press_state if pp96 else None,
+        plate_state=pp96._plate_state if pp96 else None,
         actuator_position=pp96._actuator_current_angle if pp96 else None
     )
 
@@ -86,80 +92,172 @@ async def get_status():
     
     return StatusResponse(
         status="ready",
-        message="Hardware ready",
+        message=f"Hardware ready - System is {pp96._system_state.upper()}",
+        system_state=pp96._system_state,
+        press_state=pp96._press_state,
+        plate_state=pp96._plate_state,
         actuator_position=pp96._actuator_current_angle
     )
 
 
+@app.post("/init", response_model=StatusResponse)
+async def initialize():
+    """
+    Initialize system to known state:
+    - Move press UP
+    - Move plate OUT
+    - Activate system
+    
+    Must be called before any movement commands.
+    """
+    if not pp96:
+        return StatusResponse(status="dry-run", message="Init (dry-run)")
+    
+    try:
+        pp96.init()
+        return StatusResponse(
+            status="success",
+            message="System initialized and ACTIVE",
+            system_state=pp96._system_state,
+            press_state=pp96._press_state,
+            plate_state=pp96._plate_state,
+            actuator_position=pp96._actuator_current_angle
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/stop", response_model=StatusResponse)
+async def stop_system():
+    """
+    Emergency stop: Disable all movement.
+    Call /init to reactivate.
+    """
+    if not pp96:
+        return StatusResponse(status="dry-run", message="Stop (dry-run)")
+    
+    try:
+        pp96.stop()
+        return StatusResponse(
+            status="success",
+            message="System STOPPED - call /init to reactivate",
+            system_state=pp96._system_state,
+            press_state=pp96._press_state,
+            plate_state=pp96._plate_state,
+            actuator_position=pp96._actuator_current_angle
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/press/up", response_model=StatusResponse)
 async def press_up(hold_time: float = 0.5):
-    """Move pneumatic press UP."""
+    """Move pneumatic press UP. Requires system to be active (call /init first)."""
     if not pp96:
         return StatusResponse(status="dry-run", message="Press UP (dry-run)")
     
     try:
-        pp96.press_up(hold_time=hold_time)
-        return StatusResponse(status="success", message="Press moved UP")
+        if pp96.press_up(hold_time=hold_time):
+            return StatusResponse(
+                status="success",
+                message="Press moved UP",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state
+            )
+        else:
+            return StatusResponse(
+                status="stopped",
+                message="System is STOPPED. Call /init to activate before movement.",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/press/down", response_model=StatusResponse)
 async def press_down(hold_time: float = 0.5):
-    """Move pneumatic press DOWN."""
+    """Move pneumatic press DOWN. Requires system to be active (call /init first)."""
     if not pp96:
         return StatusResponse(status="dry-run", message="Press DOWN (dry-run)")
     
     try:
-        pp96.press_down(hold_time=hold_time)
-        return StatusResponse(status="success", message="Press moved DOWN")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/press/neutral", response_model=StatusResponse)
-async def press_neutral():
-    """Set pneumatic press to NEUTRAL."""
-    if not pp96:
-        return StatusResponse(status="dry-run", message="Press NEUTRAL (dry-run)")
-    
-    try:
-        pp96.press_neutral()
-        return StatusResponse(status="success", message="Press set to NEUTRAL")
+        if pp96.press_down(hold_time=hold_time):
+            return StatusResponse(
+                status="success",
+                message="Press moved DOWN",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state
+            )
+        else:
+            return StatusResponse(
+                status="stopped",
+                message="System is STOPPED. Call /init to activate before movement.",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/plate/in", response_model=StatusResponse)
 async def plate_in(smooth: bool = True):
-    """Move plate under the press (retract actuator to IN position)."""
+    """Move plate under the press (retract actuator to IN position). Requires system to be active (call /init first)."""
     if not pp96:
         return StatusResponse(status="dry-run", message="Plate IN (dry-run)")
     
     try:
-        pp96.plate_in(smooth=smooth)
-        return StatusResponse(
-            status="success",
-            message="Plate moved IN",
-            actuator_position=pp96._actuator_current_angle
-        )
+        if pp96.plate_in(smooth=smooth):
+            return StatusResponse(
+                status="success",
+                message="Plate moved IN",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state,
+                actuator_position=pp96._actuator_current_angle
+            )
+        else:
+            return StatusResponse(
+                status="stopped",
+                message="System is STOPPED. Call /init to activate before movement.",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state,
+                actuator_position=pp96._actuator_current_angle
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/plate/out", response_model=StatusResponse)
 async def plate_out(smooth: bool = True):
-    """Move plate away from press (extend actuator to OUT position)."""
+    """Move plate away from press (extend actuator to OUT position). Requires system to be active (call /init first)."""
     if not pp96:
         return StatusResponse(status="dry-run", message="Plate OUT (dry-run)")
     
     try:
-        pp96.plate_out(smooth=smooth)
-        return StatusResponse(
-            status="success",
-            message="Plate moved OUT",
-            actuator_position=pp96._actuator_current_angle
-        )
+        if pp96.plate_out(smooth=smooth):
+            return StatusResponse(
+                status="success",
+                message="Plate moved OUT",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state,
+                actuator_position=pp96._actuator_current_angle
+            )
+        else:
+            return StatusResponse(
+                status="stopped",
+                message="System is STOPPED. Call /init to activate before movement.",
+                system_state=pp96._system_state,
+                press_state=pp96._press_state,
+                plate_state=pp96._plate_state,
+                actuator_position=pp96._actuator_current_angle
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

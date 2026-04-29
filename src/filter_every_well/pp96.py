@@ -99,6 +99,11 @@ class PressureProcessor:
         self.actuator_speed_percent = max(1, min(100, actuator_speed_percent))
         self._actuator_current_angle = None  # Unknown until first movement
         
+        # State tracking
+        self._system_state = "stopped"  # "stopped" or "active"
+        self._press_state = "unknown"  # "up", "down", "unknown"
+        self._plate_state = "unknown"  # "in", "out", "unknown"
+        
         # Configure pulse width ranges for all servos
         for ch in (self.servo_1_channel, self.servo_2_channel, self.actuator_channel):
             self.kit.servo[ch].set_pulse_width_range(pulse_min, pulse_max)
@@ -111,6 +116,50 @@ class PressureProcessor:
         # Track as None so first plate command will move it properly
         self._actuator_current_angle = None
 
+    def _check_active(self) -> bool:
+        """Check if system is active. Returns False if stopped, True if active."""
+        return self._system_state == "active"
+    
+    def init(self) -> None:
+        """
+        Initialize system to known state:
+        1. Move press UP
+        2. Move plate OUT
+        3. Set system to active state
+        
+        This must be called before any other movement commands.
+        """
+        print("Initializing system...")
+        
+        # Move press UP (without checking active state)
+        self._set_mirrored_position(self.servo_up_angle, hold_time=0.5)
+        self._reset_servos()
+        self._press_state = "up"
+        print("  Press moved UP")
+        
+        # Brief sleep
+        time.sleep(0.5)
+        
+        # Move plate OUT (directly, bypassing active check)
+        self._move_actuator_smooth(self.actuator_out_angle)
+        self._plate_state = "out"
+        print("  Plate moved OUT")
+        
+        # Activate system
+        self._system_state = "active"
+        print("System initialized and ACTIVE")
+    
+    def stop(self) -> None:
+        """
+        Emergency stop: Set system to stopped state.
+        No movement commands will work until init() is called.
+        Resets press and plate states to unknown.
+        """
+        self._system_state = "stopped"
+        self._press_state = "unknown"
+        self._plate_state = "unknown"
+        print("System STOPPED - call init() to reactivate")
+    
     def _reset_servos(self) -> None:
         """Reset both servos to neutral position synchronously."""
         self.kit.servo[self.servo_1_channel].angle = self.servo_neutral_angle
@@ -136,33 +185,56 @@ class PressureProcessor:
         
         time.sleep(hold_time)
 
-    def press_up(self, hold_time: float = 0.5) -> None:
+    def press_up(self, hold_time: float = 0.5) -> bool:
         """
         Press the UP rocker button to raise pneumatic press.
         Both servos move synchronously in opposite directions.
 
         Args:
             hold_time: Duration to hold button (seconds)
+        
+        Returns:
+            True if movement executed, False if system is stopped
         """
+        if not self._check_active():
+            return False
         self._set_mirrored_position(self.servo_up_angle, hold_time)
         self._reset_servos()
+        self._press_state = "up"
+        return True
 
-    def press_down(self, hold_time: float = 0.5) -> None:
+    def press_down(self, hold_time: float = 0.5) -> bool:
         """
         Press the DOWN rocker button to lower pneumatic press.
         Both servos move synchronously in opposite directions.
 
         Args:
             hold_time: Duration to hold button (seconds)
+        
+        Returns:
+            True if movement executed, False if system is stopped
         """
+        if not self._check_active():
+            return False
         self._set_mirrored_position(self.servo_down_angle, hold_time)
         self._reset_servos()
+        self._press_state = "down"
+        return True
 
-    def press_neutral(self) -> None:
+    def press_neutral(self) -> bool:
         """
         Return both servos to neutral (no button pressed).
+        Note: This doesn't change press state - the pneumatic press
+        stays at its last position (up or down).
+        
+        Returns:
+            True if movement executed, False if system is stopped
         """
+        if not self._check_active():
+            return False
         self._reset_servos()
+        # Press state doesn't change - it stays up or down
+        return True
 
     def _step_delay_from_speed(self) -> float:
         """
@@ -203,33 +275,47 @@ class PressureProcessor:
         
         self._actuator_current_angle = target_angle
 
-    def plate_in(self, smooth: bool = True) -> None:
+    def plate_in(self, smooth: bool = True) -> bool:
         """
         Move plate under the press (retract actuator to IN position, 40°).
         Equivalent to 'pull' in test_Waters.py.
         
         Args:
             smooth: If True, move smoothly with speed control. If False, jump immediately.
+        
+        Returns:
+            True if movement executed, False if system is stopped
         """
+        if not self._check_active():
+            return False
         if smooth:
             self._move_actuator_smooth(self.actuator_in_angle)
         else:
             self.kit.servo[self.actuator_channel].angle = self.actuator_in_angle
             self._actuator_current_angle = self.actuator_in_angle
+        self._plate_state = "in"
+        return True
 
-    def plate_out(self, smooth: bool = True) -> None:
+    def plate_out(self, smooth: bool = True) -> bool:
         """
         Move plate away from press (extend actuator to OUT position, 140°).
         This is the resting state. Equivalent to 'push' in test_Waters.py.
         
         Args:
             smooth: If True, move smoothly with speed control. If False, jump immediately.
+        
+        Returns:
+            True if movement executed, False if system is stopped
         """
+        if not self._check_active():
+            return False
         if smooth:
             self._move_actuator_smooth(self.actuator_out_angle)
         else:
             self.kit.servo[self.actuator_channel].angle = self.actuator_out_angle
             self._actuator_current_angle = self.actuator_out_angle
+        self._plate_state = "out"
+        return True
 
     def shutdown(self) -> None:
         """

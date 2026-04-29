@@ -17,7 +17,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("up", help="Move pneumatic press up")
     subparsers.add_parser("down", help="Move pneumatic press down")
-    subparsers.add_parser("neutral", help="Set pneumatic press to neutral")
 
     plate = subparsers.add_parser("plate", help="Control plate actuator")
     plate_sub = plate.add_subparsers(dest="plate_cmd", required=True)
@@ -42,10 +41,6 @@ def execute_command(args: argparse.Namespace) -> int:
                 print("Moving press DOWN...")
                 pp96.press_down()
                 print("Done.")
-            elif command == "neutral":
-                print("Setting press to NEUTRAL...")
-                pp96.press_neutral()
-                print("Done.")
             elif command == "plate":
                 if args.plate_cmd == "in":
                     print("Moving plate IN...")
@@ -68,7 +63,7 @@ def execute_command(args: argparse.Namespace) -> int:
     except RuntimeError as e:
         # Hardware not available, run in dry-run mode
         if "adafruit-circuitpython-servokit not installed" in str(e):
-            if command in {"up", "down", "neutral"}:
+            if command in {"up", "down"}:
                 print(f"[DRY-RUN] Press command: {command}")
                 return 0
             if command == "plate":

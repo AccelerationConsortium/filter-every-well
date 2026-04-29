@@ -79,7 +79,6 @@ curl http://localhost:8000/status
 # Control press
 curl -X POST http://localhost:8000/press/up
 curl -X POST http://localhost:8000/press/down
-curl -X POST http://localhost:8000/press/neutral
 
 # Control plate
 curl -X POST http://localhost:8000/plate/in
@@ -92,7 +91,6 @@ curl -X POST http://localhost:8000/plate/out
 # Move press
 filter-every-well up
 filter-every-well down
-filter-every-well neutral
 
 # Move plate
 filter-every-well plate in
@@ -108,9 +106,8 @@ from filter_every_well import PressureProcessor
 # On initialization: servos to neutral (90°), actuator position unknown
 with PressureProcessor() as pp96:
     # Control press (servo 1 / servo 2 mirrored)
-    pp96.press_up()        # 30° / 150°
-    pp96.press_down()      # 150° / 30°
-    pp96.press_neutral()   # 90° / 90°
+    pp96.press_up()        # 30° / 150° - raises pneumatic press
+    pp96.press_down()      # 150° / 30° - lowers pneumatic press
     
     # Control plate actuator (only IN and OUT, with smooth movement)
     pp96.plate_in()        # Retract to 40° (pull - plate under press)
