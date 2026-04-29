@@ -22,7 +22,6 @@ class StatusResponse(BaseModel):
     system_state: Optional[str] = None  # "stopped", "active"
     press_state: Optional[str] = None  # "up", "down", "unknown"
     plate_state: Optional[str] = None  # "in", "out", "unknown"
-    actuator_position: Optional[float] = None
 
 
 class ErrorResponse(BaseModel):
@@ -76,8 +75,7 @@ async def root():
         message="Waters PP96 Control API is running",
         system_state=pp96._system_state if pp96 else None,
         press_state=pp96._press_state if pp96 else None,
-        plate_state=pp96._plate_state if pp96 else None,
-        actuator_position=pp96._actuator_current_angle if pp96 else None
+        plate_state=pp96._plate_state if pp96 else None
     )
 
 
@@ -95,8 +93,7 @@ async def get_status():
         message=f"Hardware ready - System is {pp96._system_state.upper()}",
         system_state=pp96._system_state,
         press_state=pp96._press_state,
-        plate_state=pp96._plate_state,
-        actuator_position=pp96._actuator_current_angle
+        plate_state=pp96._plate_state
     )
 
 
@@ -120,8 +117,7 @@ async def initialize():
             message="System initialized and ACTIVE",
             system_state=pp96._system_state,
             press_state=pp96._press_state,
-            plate_state=pp96._plate_state,
-            actuator_position=pp96._actuator_current_angle
+            plate_state=pp96._plate_state
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -143,8 +139,7 @@ async def stop_system():
             message="System STOPPED - call /init to reactivate",
             system_state=pp96._system_state,
             press_state=pp96._press_state,
-            plate_state=pp96._plate_state,
-            actuator_position=pp96._actuator_current_angle
+            plate_state=pp96._plate_state
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -217,8 +212,7 @@ async def plate_in(smooth: bool = True):
                 message="Plate moved IN",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
-                plate_state=pp96._plate_state,
-                actuator_position=pp96._actuator_current_angle
+                plate_state=pp96._plate_state
             )
         else:
             return StatusResponse(
@@ -226,8 +220,7 @@ async def plate_in(smooth: bool = True):
                 message="System is STOPPED. Call /init to activate before movement.",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
-                plate_state=pp96._plate_state,
-                actuator_position=pp96._actuator_current_angle
+                plate_state=pp96._plate_state
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -246,8 +239,7 @@ async def plate_out(smooth: bool = True):
                 message="Plate moved OUT",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
-                plate_state=pp96._plate_state,
-                actuator_position=pp96._actuator_current_angle
+                plate_state=pp96._plate_state
             )
         else:
             return StatusResponse(
@@ -255,8 +247,7 @@ async def plate_out(smooth: bool = True):
                 message="System is STOPPED. Call /init to activate before movement.",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
-                plate_state=pp96._plate_state,
-                actuator_position=pp96._actuator_current_angle
+                plate_state=pp96._plate_state
             )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

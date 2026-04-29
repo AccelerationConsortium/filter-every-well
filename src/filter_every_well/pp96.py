@@ -153,11 +153,12 @@ class PressureProcessor:
         """
         Emergency stop: Set system to stopped state.
         No movement commands will work until init() is called.
-        Resets press and plate states to unknown.
+        Resets all states to unknown.
         """
         self._system_state = "stopped"
         self._press_state = "unknown"
         self._plate_state = "unknown"
+        self._actuator_current_angle = None
         print("System STOPPED - call init() to reactivate")
     
     def _reset_servos(self) -> None:

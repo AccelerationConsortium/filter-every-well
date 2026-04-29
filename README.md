@@ -1,11 +1,15 @@
 # filter-every-well
 
-Control a Waters Positive Pressure-96 Processor (PP96) using a Raspberry Pi Zero 2W
-and a 16‑channel motor HAT. This project exposes a small Python API and a simple CLI
-for driving two servos (press up/down/neutral) and a linear actuator (plate in/out).
+Remote control for Waters Positive Pressure-96 Processor (PP96) using a Raspberry Pi Zero 2W and a 16‑channel PWM/servo HAT.
 
-> **Note:** When hardware dependencies are not installed, the CLI runs in dry-run mode.
-> Install with `pip install .[hardware]` on your Raspberry Pi to enable actual control.
+**Features:**
+- 🌐 **REST API** - Persistent service with state tracking, accessible via WiFi and Tailscale
+- 🔒 **Safety Controls** - Init/stop mechanism prevents accidental movement
+- 📊 **State Tracking** - Always know press position (up/down) and plate position (in/out)
+- 🛠️ **Multiple Interfaces** - REST API, CLI, or Python library
+- 🎯 **Hardware Control** - Two mirrored servos for press control, linear actuator for plate positioning
+
+> **Note:** Install with `pip install .[hardware]` on your Raspberry Pi to enable hardware control. On other systems, commands run in dry-run mode.
 
 ## Hardware
 
@@ -58,7 +62,9 @@ pip install .[all]
 
 ### REST API (Recommended for persistent service)
 
-Start the API server:
+The REST API maintains a persistent connection to hardware and tracks system state between requests.
+
+**Start the API server:**
 
 ```bash
 # Start API server (default: http://0.0.0.0:8000)
@@ -68,21 +74,72 @@ filter-every-well-api
 filter-every-well-api --host 127.0.0.1 --port 5000
 ```
 
-Access the interactive API docs at `http://localhost:8000/docs`
+**Interactive API Documentation:**
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
 
 **API Endpoints:**
 
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/status` | Get system status |
+| POST | `/init` | Initialize system (required before first use) |
+| POST | `/stop` | Emergency stop (disables all movement) |
+| POST | `/press/up` | Move press UP |
+| POST | `/press/down` | Move press DOWN |
+| POST | `/plate/in` | Move plate IN (under press) |
+| POST | `/plate/out` | Move plate OUT (away from press) |
+
+**Example Workflow:**
+
 ```bash
-# Check status
-curl http://localhost:8000/status
+# 1. Check initial status (system is stopped)
+curl http://localhost:8000/status | jq
+# {
+#   "status": "ready",
+#   "message": "Hardware ready - System is STOPPED",
+#   "system_state": "stopped",
+#   "press_state": "unknown",
+#   "plate_state": "unknown"
+# }
 
-# Control press
-curl -X POST http://localhost:8000/press/up
-curl -X POST http://localhost:8000/press/down
+# 2. Initialize system (moves press UP and plate OUT)
+curl -X POST http://localhost:8000/init | jq
+# {
+#   "status": "success",
+#   "message": "System initialized and ACTIVE",
+#   "system_state": "active",
+#   "press_state": "up",
+#   "plate_state": "out"
+# }
 
-# Control plate
-curl -X POST http://localhost:8000/plate/in
-curl -X POST http://localhost:8000/plate/out
+# 3. Move plate under press
+curl -X POST http://localhost:8000/plate/in | jq
+
+# 4. Lower press
+curl -X POST http://localhost:8000/press/down | jq
+
+# 5. Raise press
+curl -X POST http://localhost:8000/press/up | jq
+
+# 6. Move plate out
+curl -X POST http://localhost:8000/plate/out | jq
+
+# 7. Emergency stop (if needed)
+curl -X POST http://localhost:8000/stop | jq
+# System is now stopped. Call /init to reactivate.
+```
+
+**Remote Access:**
+
+The API is accessible via both WiFi and Tailscale:
+
+```bash
+# Local network (find Pi's IP: hostname -I)
+curl http://192.168.1.100:8000/status
+
+# Tailscale VPN (find Pi's Tailscale IP: tailscale ip -4)
+curl http://100.64.254.104:8000/status
 ```
 
 ### CLI (Quick one-shot commands)
@@ -102,20 +159,32 @@ filter-every-well plate out
 ```python
 from filter_every_well import PressureProcessor
 
-# Context manager ensures proper cleanup
-# On initialization: servos to neutral (90°), actuator position unknown
-with PressureProcessor() as pp96:
-    # Control press (servo 1 / servo 2 mirrored)
-    pp96.press_up()        # 30° / 150° - raises pneumatic press
-    pp96.press_down()      # 150° / 30° - lowers pneumatic press
-    
-    # Control plate actuator (only IN and OUT, with smooth movement)
-    pp96.plate_in()        # Retract to 40° (pull - plate under press)
-    pp96.plate_out()       # Extend to 140° (push - plate away, resting state)
-    
-    # Optional: instant movement without speed control
-    pp96.plate_in(smooth=False)
-    pp96.plate_out(smooth=False)
+# Initialize hardware (system starts in stopped state)
+pp96 = PressureProcessor()
+
+# Initialize to known state (press UP, plate OUT)
+pp96.init()  # Sets system to active
+
+# Control press (servo 1 / servo 2 mirrored)
+pp96.press_up()        # Raises pneumatic press
+pp96.press_down()      # Lowers pneumatic press
+
+# Control plate actuator
+pp96.plate_in()        # Move plate under press
+pp96.plate_out()       # Move plate away from press
+
+# Optional: instant movement without smooth speed control
+pp96.plate_in(smooth=False)
+pp96.plate_out(smooth=False)
+
+# Emergency stop (disables all movement)
+pp96.stop()
+
+# Must call init() again to resume
+pp96.init()
+
+# Clean shutdown (returns to neutral, releases servos)
+pp96.shutdown()
 
 # Or manual initialization with custom configuration
 pp96 = PressureProcessor(
@@ -135,6 +204,40 @@ pp96 = PressureProcessor(
 )
 pp96.press_up(hold_time=0.5)
 pp96.shutdown()
+```
+
+## System States
+
+The API tracks three types of state:
+
+**System State:**
+- `stopped` - System inactive, no movement allowed (default at startup)
+- `active` - System active, movement commands allowed
+
+**Press State:**
+- `unknown` - Position unknown (at startup or after stop)
+- `up` - Pneumatic press raised
+- `down` - Pneumatic press lowered
+
+**Plate State:**
+- `unknown` - Position unknown (at startup or after stop)
+- `in` - Plate under press (actuator retracted)
+- `out` - Plate away from press (actuator extended)
+
+**State Transitions:**
+
+```
+Startup → stopped/unknown/unknown
+  ↓ /init
+Active → active/up/out
+  ↓ /press/down
+Active → active/down/out
+  ↓ /plate/in
+Active → active/down/in
+  ↓ /stop
+Stopped → stopped/unknown/unknown
+  ↓ /init (to resume)
+Active → active/up/out
 ```
 
 ## Running API as a System Service
