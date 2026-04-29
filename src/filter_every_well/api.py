@@ -4,8 +4,11 @@ RESTful API server for Waters PP96 control.
 Maintains persistent connection to hardware and tracks state.
 """
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
+import fcntl
+import socket
+import struct
 import uvicorn
 
 try:
@@ -15,9 +18,33 @@ except RuntimeError:
     HAS_HARDWARE = False
 
 
+def _get_interface_ipv4(interface_name: str) -> Optional[str]:
+    """Return the IPv4 address for a local network interface."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        packed_name = struct.pack("256s", interface_name[:15].encode("utf-8"))
+        packed_addr = fcntl.ioctl(sock.fileno(), 0x8915, packed_name)[20:24]
+        return socket.inet_ntoa(packed_addr)
+    except OSError:
+        return None
+    finally:
+        sock.close()
+
+
+def _get_wlan_ip() -> Optional[str]:
+    return _get_interface_ipv4("wlan0")
+
+
+def _get_tailscale_ip() -> Optional[str]:
+    return _get_interface_ipv4("tailscale0")
+
+
 # Response models
 class StatusResponse(BaseModel):
-    status: str
+    equipment_ip: Optional[str] = Field(default_factory=_get_wlan_ip)
+    equipment_tailscale: Optional[str] = Field(default_factory=_get_tailscale_ip)
+    equipment_name: str = "waters_filtration_pressor"
+    equipment_status: str
     message: str
     system_state: Optional[str] = None  # "stopped", "active"
     press_state: Optional[str] = None  # "up", "down", "unknown"
@@ -71,7 +98,7 @@ async def shutdown_event():
 async def root():
     """API root - health check."""
     return StatusResponse(
-        status="ok",
+        equipment_status="ok",
         message="Waters PP96 Control API is running",
         system_state=pp96._system_state if pp96 else None,
         press_state=pp96._press_state if pp96 else None,
@@ -84,12 +111,12 @@ async def get_status():
     """Get current system status."""
     if not pp96:
         return StatusResponse(
-            status="dry-run",
+            equipment_status="dry-run",
             message="Hardware not available - running in dry-run mode"
         )
     
     return StatusResponse(
-        status="ready",
+        equipment_status="ready",
         message=f"Hardware ready - System is {pp96._system_state.upper()}",
         system_state=pp96._system_state,
         press_state=pp96._press_state,
@@ -108,12 +135,12 @@ async def initialize():
     Must be called before any movement commands.
     """
     if not pp96:
-        return StatusResponse(status="dry-run", message="Init (dry-run)")
+        return StatusResponse(equipment_status="dry-run", message="Init (dry-run)")
     
     try:
         pp96.init()
         return StatusResponse(
-            status="success",
+            equipment_status="success",
             message="System initialized and ACTIVE",
             system_state=pp96._system_state,
             press_state=pp96._press_state,
@@ -130,12 +157,12 @@ async def stop_system():
     Call /init to reactivate.
     """
     if not pp96:
-        return StatusResponse(status="dry-run", message="Stop (dry-run)")
+        return StatusResponse(equipment_status="dry-run", message="Stop (dry-run)")
     
     try:
         pp96.stop()
         return StatusResponse(
-            status="success",
+            equipment_status="success",
             message="System STOPPED - call /init to reactivate",
             system_state=pp96._system_state,
             press_state=pp96._press_state,
@@ -149,12 +176,12 @@ async def stop_system():
 async def press_up(hold_time: float = 0.5):
     """Move pneumatic press UP. Requires system to be active (call /init first)."""
     if not pp96:
-        return StatusResponse(status="dry-run", message="Press UP (dry-run)")
+        return StatusResponse(equipment_status="dry-run", message="Press UP (dry-run)")
     
     try:
         if pp96.press_up(hold_time=hold_time):
             return StatusResponse(
-                status="success",
+                equipment_status="success",
                 message="Press moved UP",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -162,7 +189,7 @@ async def press_up(hold_time: float = 0.5):
             )
         else:
             return StatusResponse(
-                status="stopped",
+                equipment_status="stopped",
                 message="System is STOPPED. Call /init to activate before movement.",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -176,12 +203,12 @@ async def press_up(hold_time: float = 0.5):
 async def press_down(hold_time: float = 0.5):
     """Move pneumatic press DOWN. Requires system to be active (call /init first)."""
     if not pp96:
-        return StatusResponse(status="dry-run", message="Press DOWN (dry-run)")
+        return StatusResponse(equipment_status="dry-run", message="Press DOWN (dry-run)")
     
     try:
         if pp96.press_down(hold_time=hold_time):
             return StatusResponse(
-                status="success",
+                equipment_status="success",
                 message="Press moved DOWN",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -189,7 +216,7 @@ async def press_down(hold_time: float = 0.5):
             )
         else:
             return StatusResponse(
-                status="stopped",
+                equipment_status="stopped",
                 message="System is STOPPED. Call /init to activate before movement.",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -203,12 +230,12 @@ async def press_down(hold_time: float = 0.5):
 async def plate_in(smooth: bool = True):
     """Move plate under the press (retract actuator to IN position). Requires system to be active (call /init first)."""
     if not pp96:
-        return StatusResponse(status="dry-run", message="Plate IN (dry-run)")
+        return StatusResponse(equipment_status="dry-run", message="Plate IN (dry-run)")
     
     try:
         if pp96.plate_in(smooth=smooth):
             return StatusResponse(
-                status="success",
+                equipment_status="success",
                 message="Plate moved IN",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -216,7 +243,7 @@ async def plate_in(smooth: bool = True):
             )
         else:
             return StatusResponse(
-                status="stopped",
+                equipment_status="stopped",
                 message="System is STOPPED. Call /init to activate before movement.",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -230,12 +257,12 @@ async def plate_in(smooth: bool = True):
 async def plate_out(smooth: bool = True):
     """Move plate away from press (extend actuator to OUT position). Requires system to be active (call /init first)."""
     if not pp96:
-        return StatusResponse(status="dry-run", message="Plate OUT (dry-run)")
+        return StatusResponse(equipment_status="dry-run", message="Plate OUT (dry-run)")
     
     try:
         if pp96.plate_out(smooth=smooth):
             return StatusResponse(
-                status="success",
+                equipment_status="success",
                 message="Plate moved OUT",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,
@@ -243,7 +270,7 @@ async def plate_out(smooth: bool = True):
             )
         else:
             return StatusResponse(
-                status="stopped",
+                equipment_status="stopped",
                 message="System is STOPPED. Call /init to activate before movement.",
                 system_state=pp96._system_state,
                 press_state=pp96._press_state,

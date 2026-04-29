@@ -96,7 +96,10 @@ filter-every-well-api --host 127.0.0.1 --port 5000
 # 1. Check initial status (system is stopped)
 curl http://localhost:8000/status | jq
 # {
-#   "status": "ready",
+#   "equipment_ip": "192.168.1.100",
+#   "equipment_tailscale": "100.64.254.104",
+#   "equipment_name": "waters_filtration_pressor",
+#   "equipment_status": "ready",
 #   "message": "Hardware ready - System is STOPPED",
 #   "system_state": "stopped",
 #   "press_state": "unknown",
@@ -106,7 +109,10 @@ curl http://localhost:8000/status | jq
 # 2. Initialize system (moves press UP and plate OUT)
 curl -X POST http://localhost:8000/init | jq
 # {
-#   "status": "success",
+#   "equipment_ip": "192.168.1.100",
+#   "equipment_tailscale": "100.64.254.104",
+#   "equipment_name": "waters_filtration_pressor",
+#   "equipment_status": "success",
 #   "message": "System initialized and ACTIVE",
 #   "system_state": "active",
 #   "press_state": "up",
