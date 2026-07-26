@@ -1,0 +1,22 @@
+{
+  "protocol_version": "1.2",
+  "equipment_id": "filter_every_well",
+  "equipment_name": "Waters Filtration",
+  "equipment_kind": "press",
+  "equipment_version": "1.1.0",
+  "host": "press-pi",
+  "equipment_status": "requires_init",
+  "activity": "idle",
+  "activity_since": "2026-07-26T05:10:00Z",
+  "message": "System STOPPED – call /control/startup to initialize",
+  "device_time": "2026-07-26T05:11:00Z",
+  "allowed_actions": ["init"],
+  "components": {
+    "press_valve": {"connected": false, "state": "unknown"},
+    "plate":       {"connected": false, "state": "unknown"}
+  },
+  "metrics": {
+    "cycles_total": {"value": 12, "unit": "count"}
+  },
+  "details": {"system_state": "stopped", "claimed_by": null}
+}

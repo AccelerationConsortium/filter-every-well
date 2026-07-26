@@ -11,6 +11,30 @@ Remote control for Waters Positive Pressure-96 Processor (PP96) using a Raspberr
 
 > **Note:** Install with `pip install .[hardware]` on your Raspberry Pi to enable hardware control. On other systems, commands run in dry-run mode.
 
+> **API conformance:** This repo conforms to **lab status spec v1.2** (see
+> `docs/STATUS_SPEC.md` in the
+> [`ac-organic-lab`](https://github.com/AccelerationConsortium/ac-organic-lab)
+> monorepo; contract types imported from the shared
+> [`sdl-lab-contract`](https://github.com/AccelerationConsortium/sdl-lab-contract)
+> package). Requires Python ≥ 3.10.
+
+## Activity and cycle accounting (spec v1.2)
+
+**Primary operation (§2.3):** a hardware **movement** — the span the internal
+move lock is held, covering platen strokes (`press.up` / `press.down`, each a
+complete down-hold-return actuation) and plate staging moves (`plate.in` /
+`plate.out`). `/status` reports `activity: "running"` for exactly that span
+and `"idle"` otherwise; `activity_since` stamps the start of the current
+span. Activity is observed from the move lock — the same mechanism that
+serialises the hardware — never derived from `equipment_status`.
+
+**`metrics["cycles_total"]` (§2.3.1):** counts completed **platen strokes**
+only (staging moves report activity but are not cycles). A stroke lasts
+seconds — far below any reader's poll interval — so this counter, not the
+sampled activity series, is the device's utilization record. In-memory:
+resets to 0 on service restart, which readers treat as a restart, never as
+negative usage.
+
 ## Hardware
 
 - Raspberry Pi Zero 2W
