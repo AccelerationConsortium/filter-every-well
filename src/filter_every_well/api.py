@@ -181,6 +181,8 @@ async def _build_status() -> EquipmentStatus:
         equipment_name=EQUIPMENT_NAME,
         equipment_kind=EQUIPMENT_KIND,  # type: ignore[arg-type]
         equipment_status=equipment_status,  # type: ignore[arg-type]
+        activity=("running" if busy else "idle") if not is_dry_run else "unknown",
+        activity_since=_utcnow() if not is_dry_run else None,
         message=message,
         allowed_actions=_allowed_actions(is_dry_run, active, busy),
         device_time=_utcnow(),
@@ -256,8 +258,7 @@ app = FastAPI(
     version="1.1.0",
     description=(
         "REST API for the Waters Positive Pressure-96 filtration press. "
-        "Conforms to the AC lab equipment status spec v1.1. "
-        "See docs/STATUS_SPEC_v1_1.md in the ac-organic-lab monorepo."
+        "Conforms to the AC lab equipment status spec v1.2."
     ),
     lifespan=lifespan,
 )
