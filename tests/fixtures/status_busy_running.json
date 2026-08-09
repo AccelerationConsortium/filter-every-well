@@ -1,0 +1,22 @@
+{
+  "protocol_version": "1.2",
+  "equipment_id": "filter_every_well",
+  "equipment_name": "Waters Filtration",
+  "equipment_kind": "press",
+  "equipment_version": "1.1.0",
+  "host": "press-pi",
+  "equipment_status": "busy",
+  "activity": "running",
+  "activity_since": "2026-07-26T05:06:02Z",
+  "message": "Movement in progress",
+  "device_time": "2026-07-26T05:06:03Z",
+  "allowed_actions": ["stop"],
+  "components": {
+    "press_valve": {"connected": true, "state": "up"},
+    "plate":       {"connected": true, "state": "out"}
+  },
+  "metrics": {
+    "cycles_total": {"value": 12, "unit": "count"}
+  },
+  "details": {"system_state": "active", "claimed_by": null}
+}

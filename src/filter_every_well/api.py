@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Waters PP96 Control API — STATUS_SPEC v1.1 conformant.
+"""Waters PP96 Control API — STATUS_SPEC v1.2 conformant.
 
 Endpoints
 ---------
@@ -7,7 +7,10 @@ Spec-mandated (always 200, side-effect-free):
 
 * ``GET /``                    ProbeResponse
 * ``GET /health``              HealthResponse
-* ``GET /status``              EquipmentStatus (v1.1)
+* ``GET /status``              EquipmentStatus (v1.2: ``activity`` /
+                               ``activity_since`` observed from the move
+                               lock; ``metrics.cycles_total`` counting
+                               completed platen strokes)
 
 Claim protocol (v1.1 — required before any /control/* when enforced):
 
@@ -56,6 +59,7 @@ from .models import (
     ComponentStatus,
     EquipmentStatus,
     HealthResponse,
+    MetricValue,
     ProbeResponse,
 )
 
@@ -92,6 +96,33 @@ def _hostname() -> str | None:
         return None
 
 
+def _equipment_version() -> str | None:
+    """Package version for the envelope's ``equipment_version`` field."""
+    try:
+        from importlib.metadata import version
+
+        return version("filter-every-well")
+    except Exception:
+        return None
+
+
+async def _run_move(fn) -> Any:
+    """Run one hardware movement under the move lock.
+
+    Stamps the v1.2 activity span exactly at the motion boundaries — the
+    lock is held for precisely the duration of physical movement, so
+    ``activity_since`` reflects real motion, not request handling.
+    """
+    assert _move_lock is not None
+    async with _move_lock:
+        _note_activity("running")
+        loop = asyncio.get_running_loop()
+        try:
+            return await loop.run_in_executor(None, fn)
+        finally:
+            _note_activity("idle")
+
+
 def _allowed_actions(is_dry_run: bool, active: bool, busy: bool) -> list[str]:
     """Compute the v1.1 ``allowed_actions`` list from the current state."""
     if is_dry_run:
@@ -114,6 +145,33 @@ _move_lock: asyncio.Lock | None = None
 _claims: ClaimStore | None = None
 _start_time: datetime | None = None
 
+# --- v1.2 activity span + cycle accounting (STATUS_SPEC §2.3 / §2.3.1) ------
+# The primary operation is a movement (platen stroke or plate staging move);
+# `_move_lock` is held for exactly that span, so activity is observed from
+# the same mechanism that serialises the hardware — never derived from
+# `equipment_status`. `_cycles_total` counts completed PLATEN strokes
+# (press.up / press.down); plate staging moves report activity but are not
+# "cycles". In-memory: resets on process restart, per the reserved metric's
+# semantics.
+_activity: str = "unknown"
+_activity_since: datetime | None = None
+_cycles_total: int = 0
+
+
+def _note_activity(activity: str) -> None:
+    """Record an observed activity value, stamping ``activity_since`` at the
+    instant the value changes (§2.3: the start of the CURRENT span)."""
+    global _activity, _activity_since
+    if activity != _activity:
+        _activity = activity
+        _activity_since = _utcnow()
+
+
+def _count_platen_stroke() -> None:
+    """One completed platen stroke (press.up / press.down succeeded)."""
+    global _cycles_total
+    _cycles_total += 1
+
 
 # ---------------------------------------------------------------------------
 # Status builder
@@ -127,6 +185,12 @@ async def _build_status() -> EquipmentStatus:
     busy = _move_lock.locked()
     claimed_by = await _claims.current()
     uptime = (_utcnow() - _start_time).total_seconds()
+
+    # v1.2 activity: observed from the move lock (the exact hardware-motion
+    # span). Movement endpoints stamp the transitions precisely; this
+    # reconciles anything they miss. requires_init/ready/dry_run ⇒ idle by
+    # construction (the lock is free), satisfying the §2.3 invariants.
+    _note_activity("running" if busy else "idle")
 
     if is_dry_run:
         equipment_status: str = "dry_run"
@@ -180,15 +244,22 @@ async def _build_status() -> EquipmentStatus:
         equipment_id=EQUIPMENT_ID,
         equipment_name=EQUIPMENT_NAME,
         equipment_kind=EQUIPMENT_KIND,  # type: ignore[arg-type]
+        equipment_version=_equipment_version(),
         equipment_status=equipment_status,  # type: ignore[arg-type]
-        activity=("running" if busy else "idle") if not is_dry_run else "unknown",
-        activity_since=_utcnow() if not is_dry_run else None,
         message=message,
         allowed_actions=_allowed_actions(is_dry_run, active, busy),
+        activity=_activity,  # type: ignore[arg-type]
+        activity_since=_activity_since,
         device_time=_utcnow(),
         uptime_seconds=uptime,
         host=_hostname(),
         components=components,
+        metrics={
+            # Reserved §2.3.1 counter: completed platen strokes. A stroke is
+            # shorter than any reader's poll interval, so this counter — not
+            # the sampled activity series — is the utilization record.
+            "cycles_total": MetricValue(value=_cycles_total, unit="count"),
+        },
         details=details,
     )
 
@@ -255,10 +326,11 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
 app = FastAPI(
     title="Waters PP96 Control API",
-    version="1.1.0",
+    version="1.2.0",
     description=(
         "REST API for the Waters Positive Pressure-96 filtration press. "
-        "Conforms to the AC lab equipment status spec v1.2."
+        "Conforms to the AC lab equipment status spec v1.2. "
+        "See docs/STATUS_SPEC_v1_1.md in the ac-organic-lab monorepo."
     ),
     lifespan=lifespan,
 )
@@ -422,13 +494,10 @@ async def control_startup(
     """
     if not HAS_HARDWARE or _pp96 is None:
         return CommandResponse(message="Init (dry-run)")
-    assert _move_lock is not None
-    async with _move_lock:
-        loop = asyncio.get_running_loop()
-        try:
-            await loop.run_in_executor(None, _pp96.init)
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc))
+    try:
+        await _run_move(_pp96.init)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
     return CommandResponse(message="System initialized and ACTIVE")
 
 
@@ -459,17 +528,13 @@ async def control_press_up(
             status_code=409,
             detail="system is STOPPED; call /control/startup first",
         )
-    assert _move_lock is not None
-    async with _move_lock:
-        loop = asyncio.get_running_loop()
-        ok = await loop.run_in_executor(
-            None, lambda: _pp96.press_up(hold_time=req.hold_time)
-        )
+    ok = await _run_move(lambda: _pp96.press_up(hold_time=req.hold_time))
     if not ok:
         raise HTTPException(
             status_code=409,
             detail="system is STOPPED; call /control/startup first",
         )
+    _count_platen_stroke()
     return CommandResponse(message="Press moved UP")
 
 
@@ -486,17 +551,13 @@ async def control_press_down(
             status_code=409,
             detail="system is STOPPED; call /control/startup first",
         )
-    assert _move_lock is not None
-    async with _move_lock:
-        loop = asyncio.get_running_loop()
-        ok = await loop.run_in_executor(
-            None, lambda: _pp96.press_down(hold_time=req.hold_time)
-        )
+    ok = await _run_move(lambda: _pp96.press_down(hold_time=req.hold_time))
     if not ok:
         raise HTTPException(
             status_code=409,
             detail="system is STOPPED; call /control/startup first",
         )
+    _count_platen_stroke()
     return CommandResponse(message="Press moved DOWN")
 
 
@@ -513,12 +574,7 @@ async def control_plate_in(
             status_code=409,
             detail="system is STOPPED; call /control/startup first",
         )
-    assert _move_lock is not None
-    async with _move_lock:
-        loop = asyncio.get_running_loop()
-        ok = await loop.run_in_executor(
-            None, lambda: _pp96.plate_in(smooth=req.smooth)
-        )
+    ok = await _run_move(lambda: _pp96.plate_in(smooth=req.smooth))
     if not ok:
         raise HTTPException(
             status_code=409,
@@ -540,12 +596,7 @@ async def control_plate_out(
             status_code=409,
             detail="system is STOPPED; call /control/startup first",
         )
-    assert _move_lock is not None
-    async with _move_lock:
-        loop = asyncio.get_running_loop()
-        ok = await loop.run_in_executor(
-            None, lambda: _pp96.plate_out(smooth=req.smooth)
-        )
+    ok = await _run_move(lambda: _pp96.plate_out(smooth=req.smooth))
     if not ok:
         raise HTTPException(
             status_code=409,
@@ -568,7 +619,7 @@ def main(host: str = "0.0.0.0", port: int = 8000) -> None:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Waters PP96 REST API Server (v1.1)")
+    parser = argparse.ArgumentParser(description="Waters PP96 REST API Server (v1.2)")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
