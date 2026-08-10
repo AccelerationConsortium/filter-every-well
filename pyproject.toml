@@ -27,9 +27,6 @@ classifiers = [
 
 dependencies = []
 
-[tool.uv.sources]
-sdl-lab-contract = { git = "https://github.com/AccelerationConsortium/sdl-lab-contract", tag = "v1.2.0" }
-
 [project.optional-dependencies]
 hardware = [
   "adafruit-circuitpython-servokit>=1.3.0",
@@ -39,14 +36,17 @@ api = [
   "fastapi>=0.104.0",
   "uvicorn[standard]>=0.24.0",
   "pydantic>=2.0.0",
-  "sdl-lab-contract",
+  # Direct URL, not [tool.uv.sources]: this device is pip-installed on the
+  # Pi, and pip does not read uv-only sources (it then looks for the name on
+  # PyPI, where it does not exist). uv honours this form too.
+  "sdl-lab-contract @ git+https://github.com/AccelerationConsortium/sdl-lab-contract@v1.2.0",
 ]
 dev = [
   "pytest>=8",
   "httpx",
   "fastapi>=0.104.0",
   "pydantic>=2.0.0",
-  "sdl-lab-contract",
+  "sdl-lab-contract @ git+https://github.com/AccelerationConsortium/sdl-lab-contract@v1.2.0",
 ]
 all = [
   "adafruit-circuitpython-servokit>=1.3.0",
@@ -54,7 +54,7 @@ all = [
   "fastapi>=0.104.0",
   "uvicorn[standard]>=0.24.0",
   "pydantic>=2.0.0",
-  "sdl-lab-contract",
+  "sdl-lab-contract @ git+https://github.com/AccelerationConsortium/sdl-lab-contract@v1.2.0",
 ]
 
 [project.urls]
