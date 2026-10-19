@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "filter-every-well"
-version = "1.1.0"
+version = "1.2.0"
 description = "Control Waters Positive Pressure-96 Processor with Raspberry Pi Zero 2W and 16-channel motor HAT — STATUS_SPEC v1.2"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -9,6 +9,7 @@ The two servos rotate in opposite directions to press the same position on
 mirror-image rocker buttons (up/down/neutral).
 """
 
+import threading
 import time
 
 try:
@@ -99,6 +100,10 @@ class PressureProcessor:
         self.actuator_speed_percent = max(1, min(100, actuator_speed_percent))
         self._actuator_current_angle = None  # Unknown until first movement
         
+        # Set by stop() so a press hold in progress releases the rocker at
+        # once instead of sleeping out its hold_time; cleared by init().
+        self._stop_event = threading.Event()
+
         # State tracking
         self._system_state = "stopped"  # "stopped" or "active"
         self._press_state = "unknown"  # "up", "down", "unknown"
@@ -130,6 +135,7 @@ class PressureProcessor:
         This must be called before any other movement commands.
         """
         print("Initializing system...")
+        self._stop_event.clear()
         
         # Move press UP (without checking active state)
         self._set_mirrored_position(self.servo_up_angle, hold_time=0.5)
@@ -153,8 +159,10 @@ class PressureProcessor:
         """
         Emergency stop: Set system to stopped state.
         No movement commands will work until init() is called.
-        Resets all states to unknown.
+        Resets all states to unknown. A press hold in progress is cut short:
+        its thread wakes, returns the servos to neutral, and reports failure.
         """
+        self._stop_event.set()
         self._system_state = "stopped"
         self._press_state = "unknown"
         self._plate_state = "unknown"
@@ -176,7 +184,7 @@ class PressureProcessor:
 
         Args:
             servo_1_angle: Target angle for servo 1
-            hold_time: Duration to hold position (seconds)
+            hold_time: Duration to hold position (seconds); stop() ends it early
         """
         # Servo 1 moves to target angle
         self.kit.servo[self.servo_1_channel].angle = servo_1_angle
@@ -184,7 +192,7 @@ class PressureProcessor:
         servo_2_angle = 180 - servo_1_angle
         self.kit.servo[self.servo_2_channel].angle = servo_2_angle
         
-        time.sleep(hold_time)
+        self._stop_event.wait(hold_time)
 
     def press_up(self, hold_time: float = 0.5) -> bool:
         """
@@ -195,12 +203,15 @@ class PressureProcessor:
             hold_time: Duration to hold button (seconds)
         
         Returns:
-            True if movement executed, False if system is stopped
+            True if movement executed, False if system is stopped (before or
+            during the hold)
         """
         if not self._check_active():
             return False
         self._set_mirrored_position(self.servo_up_angle, hold_time)
         self._reset_servos()
+        if self._stop_event.is_set():
+            return False  # stopped mid-hold; stop() already marked state unknown
         self._press_state = "up"
         return True
 
@@ -213,12 +224,15 @@ class PressureProcessor:
             hold_time: Duration to hold button (seconds)
         
         Returns:
-            True if movement executed, False if system is stopped
+            True if movement executed, False if system is stopped (before or
+            during the hold)
         """
         if not self._check_active():
             return False
         self._set_mirrored_position(self.servo_down_angle, hold_time)
         self._reset_servos()
+        if self._stop_event.is_set():
+            return False  # stopped mid-hold; stop() already marked state unknown
         self._press_state = "down"
         return True
 
