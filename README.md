@@ -35,6 +35,15 @@ sampled activity series, is the device's utilization record. In-memory:
 resets to 0 on service restart, which readers treat as a restart, never as
 negative usage.
 
+## Press holds and stop
+
+`press.up` / `press.down` take `hold_time` (0–300 s): the servos hold the
+rocker for that long and the request blocks until they let go, so a caller
+must budget a timeout above the hold. `POST /control/stop` is
+**claim-exempt** — the claim belongs to the request doing the hold — and ends
+a hold at once: the rocker returns to neutral, the holding request returns
+409, and the press needs `/control/startup` again.
+
 ## Hardware
 
 - Raspberry Pi Zero 2W
@@ -107,12 +116,12 @@ filter-every-well-api --host 127.0.0.1 --port 5000
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/status` | Get system status |
-| POST | `/init` | Initialize system (required before first use) |
-| POST | `/stop` | Emergency stop (disables all movement) |
-| POST | `/press/up` | Move press UP |
-| POST | `/press/down` | Move press DOWN |
-| POST | `/plate/in` | Move plate IN (under press) |
-| POST | `/plate/out` | Move plate OUT (away from press) |
+| POST | `/control/startup` | Initialize system (required before first use) |
+| POST | `/control/stop` | Emergency stop, claim-exempt (disables all movement, ends a hold) |
+| POST | `/control/press/up` | Move press UP (`hold_time` 0–300 s) |
+| POST | `/control/press/down` | Move press DOWN (`hold_time` 0–300 s) |
+| POST | `/control/plate/in` | Move plate IN (under press) |
+| POST | `/control/plate/out` | Move plate OUT (away from press) |
 
 **Example Workflow:**
 

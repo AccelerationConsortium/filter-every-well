@@ -18,10 +18,11 @@ Claim protocol (v1.1 — required before any /control/* when enforced):
 * ``POST /control/heartbeat``  header: X-Claim-Token → ClaimResponse
 * ``POST /control/release``    header: X-Claim-Token → 204
 
-Control (X-Claim-Token required when ENFORCE_CLAIMS=True):
+Control (X-Claim-Token required when ENFORCE_CLAIMS=True, except stop):
 
 * ``POST /control/startup``    Initialize: press UP, plate OUT, system ACTIVE
-* ``POST /control/stop``       Emergency stop (disables movement; re-init required)
+* ``POST /control/stop``       Emergency stop, claim-exempt (disables movement,
+                               ends a press hold; re-init required)
 * ``POST /control/press/up``   Move pneumatic press to UP position
 * ``POST /control/press/down`` Move pneumatic press to DOWN position
 * ``POST /control/plate/in``   Retract plate carriage under the press
@@ -458,14 +459,23 @@ class CommandResponse(BaseModel):
     message: str | None = None
 
 
+# Longest press hold: a filtration can need minutes of pressure. The hold
+# blocks the request, so callers must budget a timeout above this; a
+# /control/stop ends it at once.
+MAX_HOLD_TIME_S = 300.0
+
+
 class PressMoveRequest(BaseModel):
     """Parameters for press movement commands."""
 
     hold_time: float = Field(
         default=0.5,
         ge=0.0,
-        le=10.0,
-        description="How long (seconds) to hold the pressed position before returning to neutral.",
+        le=MAX_HOLD_TIME_S,
+        description=(
+            "How long (seconds) to hold the pressed position before returning "
+            "to neutral. /control/stop ends a hold early."
+        ),
     )
 
 
@@ -502,10 +512,13 @@ async def control_startup(
 
 
 @app.post("/control/stop", response_model=CommandResponse, tags=["control"])
-async def control_stop(
-    _claim: None = Depends(_require_claim),
-) -> CommandResponse:
-    """Emergency-stop the press.  Disables all movement until the next /control/startup."""
+async def control_stop() -> CommandResponse:
+    """Emergency-stop the press.  Disables all movement until the next /control/startup.
+
+    Claim-exempt: it is the safety floor, and the claim is held by the very
+    request whose press hold it must cut short. A hold in progress releases
+    the rocker immediately and that request returns 409.
+    """
     if not HAS_HARDWARE or _pp96 is None:
         return CommandResponse(message="Stop (dry-run)")
     try:
